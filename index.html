@@ -307,7 +307,7 @@ const MONTHS=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','ม�
 // ───────────────────────────────────────────────
 // แก้ 2 บรรทัดนี้เมื่อ URL เปลี่ยน
 const API_URL = 'https://script.google.com/macros/s/AKfycbxQldlrcab0XtNPK35-bnifOYsmmnN83jScSxbMfM0pfy69Y3PI-Eone-ty84gZDkwY/exec';
-const FORM_URL_REAL = 'https://forms.gle/rQiaxx2dECKopeFv8';   // ใส่ลิงก์ Google Form สำหรับกรอก
+const FORM_URL_REAL = 'https://forms.gle/f6Afg2VdCk43tLFv8';
 // ───────────────────────────────────────────────
 
 var DB={}, YEARS=[], jsonpN=0;
@@ -351,26 +351,44 @@ function renderYears(){
 
 function loadYear(y){
   if(DB[y]){ year=y; page=1; renderTally(); render(); return; }
-  loading=true; render();
+
+  var cached=readCache(y);
+  if(cached){ applyData(cached); page=1; }
+  else { loading=true; render(); }
+
   jsonp('year='+y)
-    .then(function(d){
-      DB[d.year]=d.items||[];
-      year=d.year; page=1; loading=false; loadError='';
-      renderYears(); renderTally(); render();
-    })
-    .catch(function(err){ loading=false; loadError=err.message; render(); });
+    .then(function(d){ writeCache(d.year,d); applyData(d); page=1; render(); })
+    .catch(function(err){
+      if(!cached){ loading=false; loadError=err.message; render(); }
+    });
+}
+
+function cacheKey(y){ return 'pr-cache-'+(y||'latest'); }
+
+function readCache(y){
+  try{ var v=localStorage.getItem(cacheKey(y)); return v?JSON.parse(v):null; }catch(e){ return null; }
+}
+function writeCache(y,d){
+  try{ localStorage.setItem(cacheKey(y), JSON.stringify(d)); }catch(e){}
+}
+
+function applyData(d){
+  YEARS=(d.years&&d.years.length)?d.years:[d.year];
+  DB[d.year]=d.items||[];
+  year=d.year; loading=false; loadError='';
+  renderYears(); renderTally(); render();
 }
 
 function boot(){
-  loading=true; render();
+  var cached=readCache(null);
+  if(cached){ applyData(cached); }        // ขึ้นทันทีจากข้อมูลที่เคยโหลด
+  else { loading=true; render(); }
+
   jsonp('')
-    .then(function(d){
-      YEARS=(d.years&&d.years.length)?d.years:[d.year];
-      DB[d.year]=d.items||[];
-      year=d.year; loading=false; loadError='';
-      renderYears(); renderTally(); render();
-    })
-    .catch(function(err){ loading=false; loadError=err.message; render(); });
+    .then(function(d){ writeCache(null,d); writeCache(d.year,d); applyData(d); })
+    .catch(function(err){
+      if(!cached){ loading=false; loadError=err.message; render(); }
+    });
 }
 
 function renderTally(){
