@@ -100,6 +100,11 @@ select.year{padding-right:34px;font-weight:500;cursor:pointer;font-variant-numer
   background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M2 4.5L6 8.5L10 4.5' stroke='%238A94A6' stroke-width='1.6' fill='none' stroke-linecap='round'/></svg>");
   background-repeat:no-repeat;background-position:right 11px center}
 .search{flex:1 1 230px;min-width:0}
+.typesel{display:flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:var(--surface)}
+.typesel button{background:transparent;border:0;padding:9px 13px;font-size:.88rem;font-weight:500;
+  color:var(--ink-soft);cursor:pointer}
+.typesel button+button{border-left:1px solid var(--line)}
+.typesel button[aria-pressed="true"]{background:var(--accent);color:#fff}
 .search::placeholder{color:var(--ink-faint)}
 .newbtn{background:var(--accent);color:#fff;border:0;border-radius:9px;padding:9px 18px;
   font-size:.92rem;font-weight:500;cursor:pointer}
@@ -140,6 +145,9 @@ select.year{padding-right:34px;font-weight:500;cursor:pointer;font-variant-numer
 .p-done{background:var(--s-done-bg);color:var(--s-done)}
 .p-hold{background:var(--s-hold-bg);color:var(--s-hold)}
 .p-cancel{background:var(--s-cancel-bg);color:var(--s-cancel)}
+.typetag.ack{background:var(--s-done-bg);color:var(--s-done)}
+.typetag{display:inline-block;font-size:.72rem;font-weight:600;padding:1px 8px 2px;
+  border-radius:5px;margin-right:6px;vertical-align:2px;background:var(--gold-soft);color:var(--s-hold)}
 .timer{font-size:.8rem;font-variant-numeric:tabular-nums;color:var(--s-review);font-weight:500}
 .noterow{grid-column:2/-1;margin-top:6px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .note{font-size:.84rem;border-radius:7px;padding:7px 12px;margin:0;flex:1 1 250px}
@@ -184,6 +192,8 @@ select.year{padding-right:34px;font-weight:500;cursor:pointer;font-variant-numer
 hr.rule{border:0;border-top:1px solid var(--line);margin:22px 0 0}
 
 @media (max-width:640px){
+  .typesel{flex:1 1 100%}
+  .typesel button{flex:1;padding:9px 6px;font-size:.84rem}
   .item{grid-template-columns:auto 1fr}
   .right{grid-column:1/-1;grid-row:auto;flex-direction:row;align-items:center;text-align:left;flex-wrap:wrap;margin-top:6px}
   .noterow{grid-column:1/-1}
@@ -218,6 +228,12 @@ hr.rule{border:0;border-top:1px solid var(--line);margin:22px 0 0}
   <div class="bar">
     <div class="wrap">
       <select class="year" id="year" aria-label="เลือกปี พ.ศ."></select>
+      <div class="typesel" id="typesel" role="group" aria-label="กรองประเภท">
+        <button data-t="all" aria-pressed="true">ทั้งหมด</button>
+        <button data-t="ข่าวกิจกรรม" aria-pressed="false">ข่าว</button>
+        <button data-t="ประกาศ" aria-pressed="false">ประกาศ</button>
+        <button data-t="ยินดี/ขอบคุณ" aria-pressed="false">ยินดี/ขอบคุณ</button>
+      </div>
       <input class="search" id="q" type="search" placeholder="ค้นหาชื่อกิจกรรม ผู้แจ้ง หรือกลุ่มงาน" aria-label="ค้นหาข่าว">
       <button class="newbtn" id="report">ส่งข่าวใหม่</button>
     </div>
@@ -331,7 +347,7 @@ function jsonp(params){
   });
 }
 
-let year=0,filter='all',page=1,loading=true,loadError='';
+let year=0,filter='all',ftype='all',page=1,loading=true,loadError='';
 const el=id=>document.getElementById(id);
 const thaiDate=iso=>{if(!iso) return '-'; const[y,m,d]=String(iso).split('-').map(Number); if(!y||!m) return String(iso);return `${d} ${MONTHS[m-1]} ${y+543}`};
 const thaiStamp=iso=>{if(!iso) return '-'; const d=new Date(iso); if(isNaN(d)) return '-';
@@ -396,8 +412,10 @@ function boot(){
     });
 }
 
+function inType(x){ return ftype==='all' || (x.type||'ข่าวกิจกรรม')===ftype; }
+
 function renderTally(){
-  const set=DB[year]||[];
+  const set=(DB[year]||[]).filter(inType);
   const active=set.filter(x=>x.status!=='cancel');
   const c={all:active.length};
   for(const k in STATUS) c[k]=set.filter(x=>effective(x)===k).length;
@@ -415,6 +433,7 @@ function renderTally(){
 function current(){
   const q=el('q').value.trim().toLowerCase();
   return (DB[year]||[])
+    .filter(inType)
     .filter(x=>filter==='all'?x.status!=='cancel':effective(x)===filter)
     .filter(x=>!q||(x.title+' '+x.reporter+' '+x.unit).toLowerCase().includes(q))
     .sort((a,b)=>b.seq-a.seq);
@@ -463,7 +482,7 @@ function render(){
       extra=`<span class="timer">เหลือเวลาตรวจทาน ${left} นาที</span>`;
     }
     const lag=lagDays(x);
-    const late=(lag>3&&eff!=='cancel')?` <span class="late">(ส่งช้า ${lag} วัน)</span>`:'';
+    const late=(lag>3&&eff!=='cancel'&&(!x.type||x.type==='ข่าวกิจกรรม'))?` <span class="late">(ส่งช้า ${lag} วัน)</span>`:'';
     let noteRow='';
     if(eff==='hold') noteRow=`<div class="noterow">
         <p class="note hold">${x.reason||'ข้อมูลไม่ครบ กรุณาตรวจสอบ'}</p>
@@ -472,9 +491,9 @@ function render(){
         <p class="note cancel">เหตุผลที่ยกเลิก: ${x.reason}</p></div>`;
     return `<article class="item${eff==='cancel'?' off':''}" style="--spine:${s.color}">
       <span class="seq">${x.seq}</span>
-      <h2>${x.title}</h2>
+      <h2>${x.type==='ประกาศ'?'<span class="typetag">ประกาศ</span>':x.type==='ยินดี/ขอบคุณ'?'<span class="typetag ack">ยินดี/ขอบคุณ</span>':''}${x.title}</h2>
       <div class="meta">
-        <span>จัดเมื่อ <b>${thaiDate(x.eventDate)}</b> · ${x.period}</span>
+        <span>${x.type==='ประกาศ'?'วันที่เกี่ยวข้อง':x.type==='ยินดี/ขอบคุณ'?'วันที่':'จัดเมื่อ'} <b>${thaiDate(x.eventDate)}</b>${x.period?' · '+x.period:''}</span>
         <span>แจ้งเมื่อ <b>${thaiStamp(x.sent)}</b>${late}</span>
         <span>ผู้แจ้ง <b>${x.reporter}</b></span>
         <span>${x.unit}</span>
@@ -508,6 +527,13 @@ el('report').onclick=()=>{
   if(!FORM_URL_REAL){alert('ยังไม่ได้ใส่ลิงก์ Google Form\n\nแก้ที่บรรทัด FORM_URL_REAL ในไฟล์ index.html');return}
   window.open(FORM_URL_REAL,'_blank','noopener');
 };
+document.querySelectorAll('#typesel button').forEach(b=>{
+  b.onclick=()=>{
+    ftype=b.dataset.t; page=1;
+    document.querySelectorAll('#typesel button').forEach(x=>x.setAttribute('aria-pressed', x===b));
+    renderTally(); render();
+  };
+});
 el('q').addEventListener('input',()=>{page=1;render()});
 function tick(){
   const d=new Date(),days=['วันอาทิตย์','วันจันทร์','วันอังคาร','วันพุธ','วันพฤหัสบดี','วันศุกร์','วันเสาร์'];
